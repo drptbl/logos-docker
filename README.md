@@ -50,7 +50,9 @@ than Docker's default 10 seconds, so use `docker stop -t 60` (or
 
 A module that fails to start is reported in `docker logs` and skipped. The
 container's health check runs `logos-node health`, which also checks the
-blockchain API when this container started the blockchain module.
+blockchain API when this container started the blockchain module. After a
+restart the node replays its stored blocks before the API answers, about 10
+minutes for 20,000 blocks, and the check passes while it does.
 
 ## What's inside
 

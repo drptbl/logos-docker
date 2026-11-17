@@ -5,7 +5,9 @@
 #
 #   logos-node          run the node (the container's command)
 #   logos-node health   exit 0 when the daemon answers and the blockchain API
-#                       does too, if this container started the blockchain module
+#                       does too, if this container started the blockchain module.
+#                       Until the API first answers, a node still replaying its
+#                       stored blocks counts as healthy.
 #
 # Environment:
 #   LOGOS_NODE_MODULES       modules to start, in order
@@ -30,15 +32,37 @@ umask 077
 
 data=/var/lib/logos/blockchain
 started_file=/tmp/logos-node.modules
+# Holds the UTC time this run started; earlier log lines are not this run's.
+run_file=/tmp/logos-node.run
+# Written once the blockchain API has answered in this run.
+api_file=/tmp/logos-node.api
 
 modules=${LOGOS_NODE_MODULES-blockchain_module storage_module delivery_module}
 peers=${LOGOS_NODE_PEERS:-}
 metrics_port=${LOGOS_NODE_METRICS_PORT-9464}
 
+# A restarted node replays its stored blocks before the API answers, which
+# takes minutes per ten thousand blocks. It is replaying while the module is
+# loaded and its last chain recovery line in this run is not "Chain recovery
+# finished". Only log files written since the run started are read.
+replaying() {
+  [[ $(logosctl module ls 2>/dev/null) == *'"name":"blockchain_module","status":"loaded"'* ]] || return 1
+  local since last
+  since=$(<"$run_file") || return 1
+  last=$(find "$data" -maxdepth 1 -name 'logos-blockchain.log.2*' -newer "$run_file" -print0 |
+    sort -z | xargs -0 -r grep -h -i -e 'chain recovery' | tail -n 1) || true
+  [[ $last =~ [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]] || return 1
+  [[ ! ${BASH_REMATCH[0]} < $since && $last != *'Chain recovery finished'* ]]
+}
+
 if [ "${1:-}" = health ]; then
   logosctl daemon status >/dev/null 2>&1 || exit 1
   if grep -qx blockchain_module "$started_file" 2>/dev/null; then
-    curl -fsS -m 5 http://127.0.0.1:8080/cryptarchia/info >/dev/null || exit 1
+    if curl -fsS -m 5 http://127.0.0.1:8080/cryptarchia/info >/dev/null; then
+      touch "$api_file"
+    elif [ -e "$api_file" ] || ! replaying; then
+      exit 1
+    fi
   fi
   exit 0
 fi
@@ -164,6 +188,8 @@ start_metrics() {
 
 cd "$data"
 : >"$started_file"
+rm -f "$api_file"
+date -u +%Y-%m-%dT%H:%M:%S >"$run_file"
 # A daemon killed without a clean stop leaves its state file behind.
 rm -f "${LOGOSCTL_CONFIG_DIR:-$HOME/.logosctl}/daemon/state.json"
 logosctl daemon start &
