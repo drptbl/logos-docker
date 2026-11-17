@@ -54,6 +54,34 @@ blockchain API when this container started the blockchain module. After a
 restart the node replays its stored blocks before the API answers, about 10
 minutes for 20,000 blocks, and the check passes while it does.
 
+### Monitoring
+
+[`monitoring/`](monitoring) runs the node with Prometheus and Grafana:
+
+```bash
+LOGOS_NODE_PUBLIC_IP=<public-ip> docker compose -f monitoring/compose.yaml up -d
+```
+
+Grafana is on http://localhost:3001 (user `admin`, password
+`$GRAFANA_ADMIN_PASSWORD`, default `admin`) with the "Logos node" dashboard:
+tip and finalized height, slots behind the wall clock, peers, blocks imported
+and the delivery and storage modules. Prometheus is on http://localhost:9090,
+with these alerts in [`alerts.yaml`](monitoring/prometheus/alerts.yaml):
+
+| Alert | Fires when |
+|---|---|
+| `LogosNodeDown` | the metrics endpoint does not answer for 30 minutes; a restart keeps it dark while the blockchain module replays the stored chain, about 23 minutes for 93,000 blocks |
+| `LogosModuleNotReporting` | a module that reported in the last 7 days stops reporting, while the endpoint is up |
+| `LogosBlockchainBehind` | the tip is more than 300 slots (5 minutes) behind the wall clock and the gap has not shrunk in 15 minutes |
+| `LogosNoPeers` | the blockchain, delivery or storage module has no peers for 5 minutes |
+
+Prometheus evaluates them but sends them nowhere; add an Alertmanager to be
+notified. The stack runs its own node with its own volumes, so stop a node
+started with `docker run` first: both publish the same ports. The dashboard,
+which asks for its Prometheus data source on import, and the alerts work for any
+Prometheus that scrapes a node's openmetrics endpoint as `job="logos-node"`. Test
+the alerts with `promtool test rules monitoring/prometheus/alerts.test.yaml`.
+
 ## What's inside
 
 The image ships [`logosctl`](https://github.com/logos-co/logos-logoscore-cli/blob/master/docs/logosctl.md)
