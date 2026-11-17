@@ -1,7 +1,7 @@
 FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl netcat-openbsd && rm -rf /var/lib/apt/lists/*
 
-ARG LOGOSCTL_VERSION=0.3.0
+ARG LOGOSCTL_VERSION=0.3.2
 ARG TARGETARCH
 RUN case "${TARGETARCH:-$(dpkg --print-architecture)}" in \
         amd64) arch=x86_64 ;; \
@@ -26,10 +26,10 @@ ENV LANG=C.UTF-8 LOGOSCTL_CONFIG_DIR=/var/lib/logos
 COPY --chown=ubuntu:ubuntu config.yaml /tmp/config.yaml
 RUN logosctl daemon config set /tmp/config.yaml && rm /tmp/config.yaml
 
-ARG DELIVERY_VERSION=0.2.1
-ARG STORAGE_VERSION=2.1.3
-ARG BLOCKCHAIN_VERSION=0.2.4
-ARG OPENMETRICS_VERSION=0.1.1
+ARG DELIVERY_VERSION=0.3.2
+ARG STORAGE_VERSION=3.0.2
+ARG BLOCKCHAIN_VERSION=0.3.4
+ARG OPENMETRICS_VERSION=0.1.2
 ARG RLN_VERSION
 ARG LIBP2P_VERSION
 
@@ -49,6 +49,7 @@ RUN logosctl daemon start --detach \
     && logosctl package ls \
     && logosctl daemon stop \
     && while logosctl status > /dev/null 2>&1; do sleep 1; done \
-    && rm -rf /var/lib/logos/logs/*
+    && rm -rf /var/lib/logos/logs/* \
+    && rm -rf /home/ubuntu/.logos_storage
 
 CMD ["logosctl", "daemon", "start"]
